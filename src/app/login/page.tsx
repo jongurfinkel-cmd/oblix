@@ -11,11 +11,11 @@ export default function LoginPage() {
     e.preventDefault();
 
     await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: "http://localhost:3000",
-      },
-    });
+  email,
+  options: {
+    emailRedirectTo: `${window.location.origin}/dashboard`,
+  },
+});
 
     setSent(true);
   }
