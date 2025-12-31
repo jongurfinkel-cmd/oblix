@@ -6,6 +6,16 @@ import { sendAlertEmail } from "@/lib/email";
 
 export async function POST(req: Request) {
   try {
+    // AUTH CHECK
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
 
@@ -16,7 +26,7 @@ export async function POST(req: Request) {
     const uint8Array = new Uint8Array(await file.arrayBuffer());
     const filePath = `${Date.now()}-${file.name}`;
 
-    // Upload to Supabase Storage
+    // 1) UPLOAD TO SUPABASE STORAGE
     const { error: uploadError } = await supabase.storage
       .from("contracts")
       .upload(filePath, uint8Array, {
@@ -25,10 +35,13 @@ export async function POST(req: Request) {
       });
 
     if (uploadError) {
-      return NextResponse.json({ error: uploadError.message }, { status: 500 });
+      return NextResponse.json(
+        { error: uploadError.message },
+        { status: 500 }
+      );
     }
 
-    // Send PDF to Python parser
+    // 2) SEND TO PYTHON PARSER
     const fd = new FormData();
     fd.append("file", new Blob([uint8Array]), file.name);
 
@@ -38,23 +51,27 @@ export async function POST(req: Request) {
     });
 
     if (!parserRes.ok) {
-      return NextResponse.json({ error: "Parser failed" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Parser failed" },
+        { status: 500 }
+      );
     }
 
     const parsed = await parserRes.json();
 
-    // Analyze contract
+    // 3) ANALYZE CONTRACT
     const analysis = analyzeContract(parsed.text);
 
-    // Compute dates
+    // 4) COMPUTE DATES + ALERTS
     const dates = computeContractDates(
       analysis.effectiveDate,
       analysis.termMonths,
       analysis.noticeDays
     );
 
-    // SAVE TO DATABASE
+    // 5) SAVE TO DATABASE (USER-SCOPED)
     await supabase.from("contracts").insert({
+      user_id: user.id,
       file_name: file.name,
       storage_path: filePath,
 
@@ -68,8 +85,8 @@ export async function POST(req: Request) {
       alerts: dates?.alerts ?? null,
     });
 
-    // Send email alert
-    if (dates) {
+    // 6) SEND EMAIL TO *THIS USER*
+    if (dates && user.email) {
       await sendAlertEmail({
         contractName: file.name,
         endDate: new Date(dates.endDate),
@@ -78,6 +95,7 @@ export async function POST(req: Request) {
           daysBefore: a.daysBefore,
           date: new Date(a.date),
         })),
+        to: user.email,
       });
     }
 

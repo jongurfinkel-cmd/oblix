@@ -23,12 +23,14 @@ export async function GET() {
 
   for (const c of contracts ?? []) {
     if (!c.alerts || !Array.isArray(c.alerts)) continue;
+    if (!c.email) continue;
 
     for (const alert of c.alerts) {
       const alertDate = new Date(alert.date);
 
       if (isSameDay(alertDate, today)) {
         await sendAlertEmail({
+          to: c.email,
           contractName: c.file_name,
           endDate: new Date(c.contract_end_date),
           autoRenew: c.auto_renew,

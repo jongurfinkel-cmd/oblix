@@ -3,6 +3,7 @@ import { Resend } from "resend";
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendAlertEmail(payload: {
+  to: string;
   contractName: string;
   endDate: Date;
   autoRenew: boolean;
@@ -17,7 +18,7 @@ export async function sendAlertEmail(payload: {
 
   await resend.emails.send({
     from: "LEGEND <onboarding@resend.dev>",
-    to: process.env.ALERT_EMAIL!,
+    to: payload.to,
     subject: `Contract Alert: ${payload.contractName}`,
     html: `
       <h2>Contract Alert</h2>
